@@ -1,0 +1,132 @@
+pipeline {
+  agent any
+
+  tools {
+    jdk 'java17016'
+    maven 'maven399'
+  }
+
+  environment {
+    SERVICE      = 'product-service'
+    IMAGE_BASE   = "farmatodo/${SERVICE}"
+    IMAGE_TAG    = "${BUILD_NUMBER}"
+    IMAGE        = "${IMAGE_BASE}:${IMAGE_TAG}"
+
+    PORT         = '8083'
+    NET          = 'farmatodo-network'
+
+    SONAR_SCANNER_HOME = tool 'sonar7'
+
+    // GCP info (solo referencial, no despliega)
+    GCP_PROJECT_ID = 'planar-momentum-469121-n0'
+    REGION         = 'us-central1'
+    REPOSITORY     = "${SERVICE}-repo"
+    AR_HOST        = "${REGION}-docker.pkg.dev"
+    FULL_IMAGE_NAME = "${AR_HOST}/${GCP_PROJECT_ID}/${REPOSITORY}/${SERVICE}:${IMAGE_TAG}"
+  }
+
+  options {
+    timestamps()
+    timeout(time: 20, unit: 'MINUTES')
+  }
+
+  stages {
+
+    // 1️⃣ Checkout & Build + Unit Tests
+    stage('Checkout & Unit Tests') {
+      steps {
+        echo "📦 Clonando repositorio desde GitHub..."
+        checkout scmGit(
+          branches: [[name: '*/main']],
+          extensions: [],
+          userRemoteConfigs: [[
+            credentialsId: 'jenkins-gcp',
+            url: 'https://github.com/santgodev/farmatodo-backend.git'
+          ]]
+        )
+
+        dir(env.SERVICE) {
+          echo "🧪 Ejecutando tests unitarios..."
+          sh "mvn -q -Dstyle.color=always clean test"
+        }
+      }
+    }
+
+    // 2️⃣ SonarQube (SAST)
+    stage('Static Analysis - SonarQube') {
+      steps {
+        echo "🔍 Ejecutando análisis estático de código (SonarQube)..."
+        dir(env.SERVICE) {
+          withCredentials([string(credentialsId: 'sonartoken', variable: 'SONAR_TOKEN')]) {
+            withSonarQubeEnv('sonar') {
+              sh """
+                ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
+                  -Dsonar.projectKey=${SERVICE} \
+                  -Dsonar.sources=. \
+                  -Dsonar.host.url=http://sonarqube-dind:9000 \
+                  -Dsonar.java.binaries=target/classes \
+                  -Dsonar.token=$SONAR_TOKEN
+              """
+            }
+          }
+        }
+      }
+    }
+
+    // 3️⃣ Trivy FS - Antes del Docker build
+    stage('Security Scan - Source (Trivy FS)') {
+      steps {
+        echo "🧩 Escaneando vulnerabilidades en dependencias (Trivy FS)..."
+        dir(env.SERVICE) {
+          sh """
+            trivy fs . \
+              --format table \
+              --severity HIGH,CRITICAL \
+              -o trivy-fs-report.txt || true
+          """
+        }
+      }
+    }
+
+    // 4️⃣ Build Docker (solo para analizar)
+    stage('Build Docker Image for Scan') {
+      steps {
+        dir(env.SERVICE) {
+          echo "🐳 Construyendo imagen Docker solo para análisis..."
+          sh "docker build -t ${IMAGE} ."
+        }
+      }
+    }
+
+    // 5️⃣ Trivy Image Scan - Post build
+    stage('Security Scan - Image (Trivy Image)') {
+      steps {
+        echo "🔎 Escaneando imagen Docker ${IMAGE}..."
+        sh """
+          trivy image ${IMAGE} \
+            --format table \
+            --severity HIGH,CRITICAL \
+            -o trivy-image-report.txt || true
+        """
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "✅ Pipeline de QA completado exitosamente para ${SERVICE}"
+    }
+    failure {
+      echo "❌ Falló el pipeline de QA para ${SERVICE}"
+    }
+    always {
+      echo "=========================================="
+      echo "Service: ${SERVICE}"
+      echo "Status: ${currentBuild.result ?: 'SUCCESS'}"
+      echo "Duration: ${currentBuild.durationString}"
+      echo "=========================================="
+      archiveArtifacts artifacts: "${SERVICE}/target/*.jar", allowEmptyArchive: true, fingerprint: true
+      archiveArtifacts artifacts: "**/trivy-*.txt", allowEmptyArchive: true
+    }
+  }
+}

@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: product-service
+  profiles:
+    active: dev
+  config:
+    import: optional:configserver:https://config-server:8888

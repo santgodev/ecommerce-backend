@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: token-service
+
+  # Spring Cloud Config Client - connects to config-server microservice
+  # Config-server fetches configuration from: https://github.com/santgodev/farmatodo-config-service
+  config:
+    import: optional:configserver:http://localhost:8888
+  cloud:
+    config:
+      uri: http://localhost:8888
+      fail-fast: false
+      enabled: true
+      label: master
+      profile: default
+      # Set to true in production to retry connection to config-server
+      retry:
+        enabled: false
