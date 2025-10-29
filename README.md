@@ -1270,5 +1270,3 @@ Este proyecto es parte de un ejercicio educativo y no está licenciado para uso 
 
 **Última Actualización:** 27 de Enero de 2025
 **Versión:** 1.0.0
-#   e c o m m e r c e - b a c k e n d  
- 
