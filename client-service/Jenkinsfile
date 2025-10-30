@@ -18,8 +18,8 @@ pipeline {
 
     SONAR_SCANNER_HOME = tool 'sonar7'
 
-    // 📦 Directorio de caché persistente para Trivy
-    TRIVY_CACHE_DIR = '/var/jenkins_home/.trivycache'
+    // 📦 Caché de Trivy local al workspace
+    TRIVY_CACHE_LOCAL = "${WORKSPACE}/.trivycache"
   }
 
   options {
@@ -29,13 +29,11 @@ pipeline {
 
   stages {
 
-    // 1️⃣ Checkout & Build
     stage('Checkout & Build') {
       steps {
         echo "📦 Clonando repositorio desde GitHub..."
         checkout scmGit(
           branches: [[name: '*/main']],
-          extensions: [],
           userRemoteConfigs: [[
             credentialsId: 'jenkins-gcp',
             url: 'https://github.com/santgodev/farmatodo-backend.git'
@@ -49,7 +47,6 @@ pipeline {
       }
     }
 
-    // 2️⃣ Análisis con SonarQube
     stage('SonarQube Analysis') {
       steps {
         echo "🔍 Ejecutando análisis estático con SonarQube..."
@@ -70,13 +67,15 @@ pipeline {
       }
     }
 
-    // 3️⃣ Escaneo de dependencias con Trivy (ARCHIVO FUENTE)
+    // 3️⃣ Escaneo de dependencias con Trivy
     stage('Trivy Source Scan') {
       steps {
         echo "🧩 Escaneando dependencias con Trivy..."
         dir(env.SERVICE) {
           sh """
-            export TRIVY_CACHE_DIR=${TRIVY_CACHE_DIR}
+            mkdir -p ${TRIVY_CACHE_LOCAL}
+            export TRIVY_CACHE_DIR=${TRIVY_CACHE_LOCAL}
+            echo "Usando caché de Trivy en: ${TRIVY_CACHE_LOCAL}"
             trivy fs --no-progress \
               --format table \
               --severity HIGH,CRITICAL \
@@ -103,13 +102,14 @@ pipeline {
       }
     }
 
-    // 5️⃣ Escaneo de imagen con Trivy (CORREGIDO)
+    // 5️⃣ Escaneo de imagen con Trivy
     stage('Trivy Image Scan') {
       steps {
         echo "🔎 Escaneando vulnerabilidades en la imagen Docker..."
         dir(env.SERVICE) {
           sh """
-            export TRIVY_CACHE_DIR=${TRIVY_CACHE_DIR}
+            export TRIVY_CACHE_DIR=${TRIVY_CACHE_LOCAL}
+            echo "Reutilizando caché de Trivy: ${TRIVY_CACHE_LOCAL}"
             trivy image --no-progress \
               --format table \
               --severity HIGH,CRITICAL \
