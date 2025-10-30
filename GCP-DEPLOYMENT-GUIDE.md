@@ -1,4 +1,4 @@
-# Guía de Deployment a Google Cloud Platform (GCP)
+ # Guía de Deployment a Google Cloud Platform (GCP)
 
 Esta guía explica cómo desplegar la aplicación Farmatodo completa a Google Cloud Platform usando Docker Compose en Google Compute Engine.
 
