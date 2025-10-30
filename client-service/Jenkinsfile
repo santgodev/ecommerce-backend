@@ -59,8 +59,7 @@ pipeline {
                   -Dsonar.sources=. \
                   -Dsonar.host.url=http://sonarqube-dind:9000 \
                   -Dsonar.java.binaries=target/classes \
-                  -Dsonar.token=$SONAR_TOKEN \
-                  --no-progress
+                  -Dsonar.token=$SONAR_TOKEN
               """
             }
           }
@@ -68,7 +67,7 @@ pipeline {
       }
     }
 
-    // 3️⃣ Escaneo de dependencias con Trivy
+    // 3️⃣ Escaneo de dependencias con Trivy (ARCHIVO FUENTE)
     stage('Trivy Source Scan') {
       steps {
         echo "🧩 Escaneando dependencias con Trivy..."
@@ -119,19 +118,4 @@ pipeline {
 
   post {
     success {
-      echo "✅ Build, análisis y pruebas locales completadas con éxito para ${SERVICE}!"
-    }
-    failure {
-      echo "❌ Falló el pipeline de ${SERVICE}!"
-    }
-    always {
-      echo "=========================================="
-      echo "Service: ${SERVICE}"
-      echo "Status: ${currentBuild.result ?: 'SUCCESS'}"
-      echo "Duration: ${currentBuild.durationString}"
-      echo "=========================================="
-      archiveArtifacts artifacts: "${SERVICE}/target/*.jar", allowEmptyArchive: true, fingerprint: true
-      archiveArtifacts artifacts: "**/trivy-*.txt", allowEmptyArchive: true
-    }
-  }
-}
+      e
