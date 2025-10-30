@@ -42,7 +42,8 @@
       "Bash(timeout 40 bash:*)",
       "Bash(docker logs:*)",
       "Bash(timeout 20 bash:*)",
-      "Bash(timeout 60 bash:*)"
+      "Bash(timeout 60 bash:*)",
+      "Bash(./mvnw.cmd test:*)"
     ],
     "deny": [],
     "ask": []

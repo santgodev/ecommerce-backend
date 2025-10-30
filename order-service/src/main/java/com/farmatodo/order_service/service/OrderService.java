@@ -38,6 +38,17 @@ public class OrderService {
         String transactionId = MDC.get("transactionId");
         logger.info("Creating order - TransactionId: {}, ClientId: {}", transactionId, request.getClientId());
 
+        // Validate token is provided
+        if (request.getToken() == null || request.getToken().trim().isEmpty()) {
+            logService.logError("Token validation failed",
+                    String.format("ClientId: %d, Token is null or empty", request.getClientId()));
+            throw new BusinessException(
+                    "Token is required for order creation",
+                    "TOKEN_REQUIRED",
+                    400
+            );
+        }
+
         logService.logInfo("Order creation started",
                 String.format("ClientId: %d, Token: %s",
                         request.getClientId(), request.getToken()));
@@ -104,17 +115,16 @@ public class OrderService {
             order.addItem(orderItem);
         }
 
-        // Save order
+        // Save order in PENDING state
         order = orderRepository.save(order);
         logger.info("Order created with id: {}", order.getId());
 
         logService.logInfo("Order entity created",
                 String.format("OrderId: %d, TotalAmount: %s", order.getId(), order.getTotalAmount()));
 
-        // Step 4: Process payment
+        // Step 4: Process payment (status will be updated to PROCESSING internally, then APPROVED/REJECTED)
         logger.info("Processing payment for order: {}", order.getId());
         order.setStatus("PROCESSING");
-        order = orderRepository.save(order);
 
         PaymentRequestDTO paymentRequest = PaymentRequestDTO.builder()
                 .token(request.getToken())
