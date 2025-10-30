@@ -18,8 +18,8 @@ pipeline {
 
     SONAR_SCANNER_HOME = tool 'sonar7'
 
-    // 📦 Caché de Trivy local al workspace
-    TRIVY_CACHE_LOCAL = "${WORKSPACE}/.trivycache"
+    // 📦 Carpeta local para caché de Trivy (persistente por workspace)
+    TRIVY_CACHE_DIR = "${WORKSPACE}/.trivycache"
   }
 
   options {
@@ -29,11 +29,13 @@ pipeline {
 
   stages {
 
+    // 1️⃣ Checkout & Build
     stage('Checkout & Build') {
       steps {
         echo "📦 Clonando repositorio desde GitHub..."
         checkout scmGit(
           branches: [[name: '*/main']],
+          extensions: [],
           userRemoteConfigs: [[
             credentialsId: 'jenkins-gcp',
             url: 'https://github.com/santgodev/farmatodo-backend.git'
@@ -47,6 +49,7 @@ pipeline {
       }
     }
 
+    // 2️⃣ Análisis con SonarQube
     stage('SonarQube Analysis') {
       steps {
         echo "🔍 Ejecutando análisis estático con SonarQube..."
@@ -67,15 +70,16 @@ pipeline {
       }
     }
 
-    // 3️⃣ Escaneo de dependencias con Trivy
+    // 3️⃣ Escaneo de dependencias con Trivy (archivos fuente)
     stage('Trivy Source Scan') {
       steps {
         echo "🧩 Escaneando dependencias con Trivy..."
         dir(env.SERVICE) {
           sh """
-            mkdir -p ${TRIVY_CACHE_LOCAL}
-            export TRIVY_CACHE_DIR=${TRIVY_CACHE_LOCAL}
-            echo "Usando caché de Trivy en: ${TRIVY_CACHE_LOCAL}"
+            mkdir -p ${TRIVY_CACHE_DIR}
+            export TRIVY_CACHE_DIR=${TRIVY_CACHE_DIR}
+            echo "📦 Usando caché de Trivy en: ${TRIVY_CACHE_DIR}"
+
             trivy fs --no-progress \
               --format table \
               --severity HIGH,CRITICAL \
@@ -108,8 +112,9 @@ pipeline {
         echo "🔎 Escaneando vulnerabilidades en la imagen Docker..."
         dir(env.SERVICE) {
           sh """
-            export TRIVY_CACHE_DIR=${TRIVY_CACHE_LOCAL}
-            echo "Reutilizando caché de Trivy: ${TRIVY_CACHE_LOCAL}"
+            export TRIVY_CACHE_DIR=${TRIVY_CACHE_DIR}
+            echo "📦 Reutilizando caché de Trivy: ${TRIVY_CACHE_DIR}"
+
             trivy image --no-progress \
               --format table \
               --severity HIGH,CRITICAL \
