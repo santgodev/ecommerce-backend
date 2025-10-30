@@ -86,6 +86,6 @@ public class ClientController {
     }
     @GetMapping("/ping2")
     public String ping() {
-        return "lol2";
+        return "lol3";
     }
 }
