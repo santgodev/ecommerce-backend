@@ -1,6 +1,16 @@
-build-version: 1.0.2
-# Force Jenkins workspace refresh
+build-version: 1.0.3
+# Force Jenkins workspace refresh - 2025-10-30 18:10
+# CRITICAL: Jenkins must pull latest code with fixes
+#
 # Fixed remaining 2 test failures:
 # - Added GlobalExceptionHandler to ProductControllerTest imports
 # - Override spring.config.import in ProductServiceApplicationTests
-# All 34 tests now passing locally
+# - Added api.key property to ProductServiceApplicationTests
+#
+# All 34 tests passing locally - verified with commit 5bf3bc8
+#
+# If this build fails with same errors, Jenkins is NOT pulling latest code!
+# Required properties in test:
+#   - spring.cloud.config.enabled=false
+#   - spring.config.import=
+#   - api.key=test-api-key-12345

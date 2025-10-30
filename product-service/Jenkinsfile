@@ -42,6 +42,10 @@ pipeline {
           ]]
         )
 
+        // Debug: Show current commit
+        sh "git log -1 --oneline"
+        sh "git show HEAD:product-service/.jenkins-version"
+
         dir(env.SERVICE) {
           echo "🧪 Ejecutando pruebas unitarias..."
           sh "mvn -q -Dstyle.color=always clean test"
