@@ -18,7 +18,7 @@ pipeline {
 
     SONAR_SCANNER_HOME = tool 'sonar7'
 
-    // 📦 Caché persistente de Trivy
+    // 📦 Directorio de caché persistente para Trivy
     TRIVY_CACHE_DIR = '/var/jenkins_home/.trivycache'
   }
 
@@ -76,7 +76,8 @@ pipeline {
         echo "🧩 Escaneando dependencias con Trivy..."
         dir(env.SERVICE) {
           sh """
-            trivy fs --cache-dir $TRIVY_CACHE_DIR --no-progress \
+            export TRIVY_CACHE_DIR=${TRIVY_CACHE_DIR}
+            trivy fs --no-progress \
               --format table \
               --severity HIGH,CRITICAL \
               -o trivy-fs-report.txt \
@@ -102,13 +103,14 @@ pipeline {
       }
     }
 
-    // 5️⃣ Escaneo de imagen con Trivy (OPTIMIZADO)
+    // 5️⃣ Escaneo de imagen con Trivy (CORREGIDO)
     stage('Trivy Image Scan') {
       steps {
         echo "🔎 Escaneando vulnerabilidades en la imagen Docker..."
         dir(env.SERVICE) {
           sh """
-            trivy image --cache-dir $TRIVY_CACHE_DIR --no-progress \
+            export TRIVY_CACHE_DIR=${TRIVY_CACHE_DIR}
+            trivy image --no-progress \
               --format table \
               --severity HIGH,CRITICAL \
               -o trivy-image-report.txt \
