@@ -17,11 +17,14 @@ pipeline {
     NET          = 'farmatodo-network'
 
     SONAR_SCANNER_HOME = tool 'sonar7'
+
+    // 📦 Caché persistente de Trivy
+    TRIVY_CACHE_DIR = '/var/jenkins_home/.trivycache'
   }
 
   options {
     timestamps()
-    timeout(time: 15, unit: 'MINUTES')
+    timeout(time: 20, unit: 'MINUTES')
   }
 
   stages {
@@ -73,7 +76,7 @@ pipeline {
         echo "🧩 Escaneando dependencias con Trivy..."
         dir(env.SERVICE) {
           sh """
-            trivy fs --no-progress \
+            trivy fs --cache-dir $TRIVY_CACHE_DIR --no-progress \
               --format table \
               --severity HIGH,CRITICAL \
               -o trivy-fs-report.txt \
@@ -99,13 +102,13 @@ pipeline {
       }
     }
 
-    // 5️⃣ Escaneo de imagen con Trivy (CORREGIDO)
+    // 5️⃣ Escaneo de imagen con Trivy (OPTIMIZADO)
     stage('Trivy Image Scan') {
       steps {
         echo "🔎 Escaneando vulnerabilidades en la imagen Docker..."
         dir(env.SERVICE) {
           sh """
-            trivy image --no-progress \
+            trivy image --cache-dir $TRIVY_CACHE_DIR --no-progress \
               --format table \
               --severity HIGH,CRITICAL \
               -o trivy-image-report.txt \
