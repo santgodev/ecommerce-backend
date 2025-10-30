@@ -505,14 +505,15 @@ class OrderServiceTest {
                 .token(null)
                 .build();
 
-        when(cartServiceClient.getCartByUserId(1L)).thenReturn(validCart);
-        when(clientServiceClient.getClientById(1L)).thenReturn(validClient);
+        // No need to stub cart and client services as token validation happens first
 
         // Act & Assert
         assertThatThrownBy(() -> orderService.createOrder(invalidRequest))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("Token is required");
 
+        verify(cartServiceClient, never()).getCartByUserId(any());
+        verify(clientServiceClient, never()).getClientById(any());
         verify(tokenServiceClient, never()).processPayment(any());
         verify(orderRepository, never()).save(any());
     }
@@ -525,27 +526,26 @@ class OrderServiceTest {
         when(cartServiceClient.getCartByUserId(1L)).thenReturn(validCart);
         when(clientServiceClient.getClientById(1L)).thenReturn(validClient);
         when(tokenServiceClient.processPayment(any(PaymentRequestDTO.class))).thenReturn(approvedPayment);
+
+        // Capture the status at each save by storing it separately
+        java.util.List<String> statusAtSave = new ArrayList<>();
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
+            statusAtSave.add(order.getStatus());  // Capture status at this moment
             order.setId(1L);
             return order;
         });
-
-        ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
 
         // Act
         orderService.createOrder(validOrderRequest);
 
         // Assert
-        verify(orderRepository, times(2)).save(orderCaptor.capture());
+        verify(orderRepository, times(2)).save(any(Order.class));
 
-        // First save: PENDING status
-        Order firstSave = orderCaptor.getAllValues().get(0);
-        assertThat(firstSave.getStatus()).isEqualTo("PENDING");
-
-        // Second save: APPROVED status
-        Order secondSave = orderCaptor.getAllValues().get(1);
-        assertThat(secondSave.getStatus()).isEqualTo("APPROVED");
+        // Verify status progression: PENDING -> APPROVED (without intermediate PROCESSING save)
+        assertThat(statusAtSave).hasSize(2);
+        assertThat(statusAtSave.get(0)).isEqualTo("PENDING");
+        assertThat(statusAtSave.get(1)).isEqualTo("APPROVED");
     }
 
     @Test
@@ -554,27 +554,26 @@ class OrderServiceTest {
         when(cartServiceClient.getCartByUserId(1L)).thenReturn(validCart);
         when(clientServiceClient.getClientById(1L)).thenReturn(validClient);
         when(tokenServiceClient.processPayment(any(PaymentRequestDTO.class))).thenReturn(rejectedPayment);
+
+        // Capture the status at each save by storing it separately
+        java.util.List<String> statusAtSave = new ArrayList<>();
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
+            statusAtSave.add(order.getStatus());  // Capture status at this moment
             order.setId(1L);
             return order;
         });
-
-        ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
 
         // Act
         orderService.createOrder(validOrderRequest);
 
         // Assert
-        verify(orderRepository, times(2)).save(orderCaptor.capture());
+        verify(orderRepository, times(2)).save(any(Order.class));
 
-        // First save: PENDING status
-        Order firstSave = orderCaptor.getAllValues().get(0);
-        assertThat(firstSave.getStatus()).isEqualTo("PENDING");
-
-        // Second save: REJECTED status
-        Order secondSave = orderCaptor.getAllValues().get(1);
-        assertThat(secondSave.getStatus()).isEqualTo("REJECTED");
+        // Verify status progression: PENDING -> REJECTED (without intermediate PROCESSING save)
+        assertThat(statusAtSave).hasSize(2);
+        assertThat(statusAtSave.get(0)).isEqualTo("PENDING");
+        assertThat(statusAtSave.get(1)).isEqualTo("REJECTED");
     }
 
     // ==================== GET ORDER BY ID TESTS ====================

@@ -17,11 +17,14 @@ pipeline {
     NET          = 'farmatodo-network'
 
     SONAR_SCANNER_HOME = tool 'sonar7'
+
+    // 📦 Caché persistente para Trivy (evita descargar DB en cada build)
+    TRIVY_CACHE_DIR = '/var/jenkins_home/.trivycache'
   }
 
   options {
     timestamps()
-    timeout(time: 15, unit: 'MINUTES')
+    timeout(time: 20, unit: 'MINUTES')
   }
 
   stages {
@@ -67,16 +70,21 @@ pipeline {
       }
     }
 
-    // 3️⃣ Escaneo de dependencias con Trivy
+    // 3️⃣ Escaneo de dependencias con Trivy (fuente)
     stage('Trivy Source Scan') {
       steps {
-        echo "🧩 Escaneando dependencias con Trivy..."
+        echo "🧩 Escaneando dependencias con Trivy (fuente)..."
         dir(env.SERVICE) {
           sh """
-            trivy fs . \
+            export TRIVY_CACHE_DIR=${TRIVY_CACHE_DIR}
+            echo "📦 Usando caché de Trivy: ${TRIVY_CACHE_DIR}"
+
+            trivy fs --cache-dir ${TRIVY_CACHE_DIR} \
+              --no-progress \
               --format table \
               --severity HIGH,CRITICAL \
-              -o trivy-fs-report.txt || true
+              -o trivy-fs-report.txt \
+              . || true
           """
         }
       }
@@ -98,16 +106,26 @@ pipeline {
       }
     }
 
-    // 5️⃣ Escaneo de imagen con Trivy
+    // 5️⃣ Escaneo de imagen con Trivy (optimizado)
     stage('Trivy Image Scan') {
       steps {
         echo "🔎 Escaneando vulnerabilidades en la imagen Docker..."
-        sh """
-          trivy image ${IMAGE} \
-            --format table \
-            --severity HIGH,CRITICAL \
-            -o trivy-image-report.txt || true
-        """
+        dir(env.SERVICE) {
+          sh """
+            export TRIVY_CACHE_DIR=${TRIVY_CACHE_DIR}
+            echo "📦 Reutilizando caché de Trivy: ${TRIVY_CACHE_DIR}"
+
+            trivy image \
+              --cache-dir ${TRIVY_CACHE_DIR} \
+              --no-progress \
+              --light \
+              --timeout 10m \
+              --format table \
+              --severity HIGH,CRITICAL \
+              -o trivy-image-report.txt \
+              ${IMAGE} || true
+          """
+        }
       }
     }
   }
