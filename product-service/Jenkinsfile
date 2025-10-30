@@ -13,16 +13,13 @@ pipeline {
     IMAGE        = "${IMAGE_BASE}:${IMAGE_TAG}"
 
     PORT         = '8083'
+    HOST         = '8083'
     NET          = 'farmatodo-network'
 
     SONAR_SCANNER_HOME = tool 'sonar7'
 
-    // GCP info (solo referencial, no despliega)
-    GCP_PROJECT_ID = 'planar-momentum-469121-n0'
-    REGION         = 'us-central1'
-    REPOSITORY     = "${SERVICE}-repo"
-    AR_HOST        = "${REGION}-docker.pkg.dev"
-    FULL_IMAGE_NAME = "${AR_HOST}/${GCP_PROJECT_ID}/${REPOSITORY}/${SERVICE}:${IMAGE_TAG}"
+    // 📦 Caché persistente para Trivy (evita descargar DB en cada build)
+    TRIVY_CACHE_DIR = '/var/jenkins_home/.trivycache'
   }
 
   options {
@@ -32,7 +29,7 @@ pipeline {
 
   stages {
 
-    // 1️⃣ Checkout & Build + Unit Tests
+    // 1️⃣ Checkout & Unit Tests
     stage('Checkout & Unit Tests') {
       steps {
         echo "📦 Clonando repositorio desde GitHub..."
@@ -46,16 +43,16 @@ pipeline {
         )
 
         dir(env.SERVICE) {
-          echo "🧪 Ejecutando tests unitarios..."
+          echo "🧪 Ejecutando pruebas unitarias..."
           sh "mvn -q -Dstyle.color=always clean test"
         }
       }
     }
 
-    // 2️⃣ SonarQube (SAST)
-    stage('Static Analysis - SonarQube') {
+    // 2️⃣ Análisis con SonarQube
+    stage('SonarQube Analysis') {
       steps {
-        echo "🔍 Ejecutando análisis estático de código (SonarQube)..."
+        echo "🔍 Ejecutando análisis estático con SonarQube..."
         dir(env.SERVICE) {
           withCredentials([string(credentialsId: 'sonartoken', variable: 'SONAR_TOKEN')]) {
             withSonarQubeEnv('sonar') {
@@ -73,51 +70,73 @@ pipeline {
       }
     }
 
-    // 3️⃣ Trivy FS - Antes del Docker build
-    stage('Security Scan - Source (Trivy FS)') {
+    // 3️⃣ Escaneo de dependencias con Trivy (fuente)
+    stage('Trivy Source Scan') {
       steps {
-        echo "🧩 Escaneando vulnerabilidades en dependencias (Trivy FS)..."
+        echo "🧩 Escaneando dependencias con Trivy (fuente)..."
         dir(env.SERVICE) {
           sh """
-            trivy fs . \
+            export TRIVY_CACHE_DIR=${TRIVY_CACHE_DIR}
+            echo "📦 Usando caché de Trivy: ${TRIVY_CACHE_DIR}"
+
+            trivy fs \
+              --no-progress \
+              --skip-update \
               --format table \
               --severity HIGH,CRITICAL \
-              -o trivy-fs-report.txt || true
+              -o trivy-fs-report.txt \
+              . || true
           """
         }
       }
     }
 
-    // 4️⃣ Build Docker (solo para analizar)
-    stage('Build Docker Image for Scan') {
+    // 4️⃣ Construcción y prueba local en Docker
+    stage('Build Docker Image & Run Local') {
       steps {
         dir(env.SERVICE) {
-          echo "🐳 Construyendo imagen Docker solo para análisis..."
-          sh "docker build -t ${IMAGE} ."
+          echo "🐳 Construyendo imagen Docker local..."
+          sh """
+            docker build -t ${IMAGE} .
+            docker network inspect ${NET} >/dev/null 2>&1 || docker network create ${NET}
+            docker rm -f ${SERVICE} >/dev/null 2>&1 || true
+            docker run -d --name ${SERVICE} --network ${NET} -p ${HOST}:${PORT} ${IMAGE}
+            echo "✅ ${SERVICE} ejecutándose localmente en http://localhost:${HOST}"
+          """
         }
       }
     }
 
-    // 5️⃣ Trivy Image Scan - Post build
-    stage('Security Scan - Image (Trivy Image)') {
+    // 5️⃣ Escaneo de imagen con Trivy (optimizado)
+    stage('Trivy Image Scan') {
       steps {
-        echo "🔎 Escaneando imagen Docker ${IMAGE}..."
-        sh """
-          trivy image ${IMAGE} \
-            --format table \
-            --severity HIGH,CRITICAL \
-            -o trivy-image-report.txt || true
-        """
+        echo "🔎 Escaneando vulnerabilidades en la imagen Docker..."
+        dir(env.SERVICE) {
+          sh """
+            export TRIVY_CACHE_DIR=${TRIVY_CACHE_DIR}
+            echo "📦 Reutilizando caché de Trivy: ${TRIVY_CACHE_DIR}"
+
+            trivy image \
+              --no-progress \
+              --skip-update \
+              --light \
+              --timeout 10m \
+              --format table \
+              --severity HIGH,CRITICAL \
+              -o trivy-image-report.txt \
+              ${IMAGE} || true
+          """
+        }
       }
     }
   }
 
   post {
     success {
-      echo "✅ Pipeline de QA completado exitosamente para ${SERVICE}"
+      echo "✅ Build, análisis y pruebas locales completadas con éxito para ${SERVICE}!"
     }
     failure {
-      echo "❌ Falló el pipeline de QA para ${SERVICE}"
+      echo "❌ Falló el pipeline de ${SERVICE}!"
     }
     always {
       echo "=========================================="
