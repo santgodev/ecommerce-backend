@@ -23,7 +23,7 @@ Una arquitectura completa de microservicios con Spring Boot que implementa una p
 
 ## Descripción General
 
-Farmatodo es una plataforma de e-commerce basada en microservicios diseñada con seguridad, escalabilidad y mantenibilidad en mente. La plataforma implementa prácticas modernas de DevOps incluyendo contenedorización, pruebas automatizadas, análisis estático de código y escaneo de vulnerabilidades.
+Farmatodo es una plataforma de e-commerce basada en microservicios diseñada con seguridad, escalabilidad y mantenibilidad en mente. La plataforma implementa prácticas modernas de DevSecOps incluyendo contenedorización, pruebas automatizadas, análisis estático de código y escaneo de vulnerabilidades.
 
 ---
 
@@ -288,7 +288,7 @@ Enrutamiento Interno
 ### Base de Datos
 - **PostgreSQL** - Base de datos relacional (una por servicio)
 
-### DevOps e Infraestructura
+### DevSecOps e Infraestructura
 - **Docker** - Contenedorización
 - **Docker Compose** - Orquestación de múltiples contenedores
 - **Jenkins** - Automatización CI/CD
@@ -1264,11 +1264,9 @@ Este proyecto es parte de un ejercicio educativo y no está licenciado para uso 
 - Documentación de Spring Boot
 - Documentación de Docker
 - Patrones de diseño de microservicios
-- Mejores prácticas de DevOps
+- Mejores prácticas de DevSecOps
 
 ---
 
 **Última Actualización:** 27 de Enero de 2025
 **Versión:** 1.0.0
-#   e c o m m e r c e - b a c k e n d  
- 
