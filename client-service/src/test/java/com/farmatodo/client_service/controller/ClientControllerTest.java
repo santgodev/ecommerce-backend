@@ -10,9 +10,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
@@ -28,15 +29,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(
-        controllers = ClientController.class,
-        excludeAutoConfiguration = {
-                org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration.class,
-                org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration.class,
-                org.springframework.boot.autoconfigure.security.oauth2.client.OAuth2ClientAutoConfiguration.class,
-                org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration.class,
-                org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration.class,
-                org.springframework.boot.autoconfigure.web.servlet.error.ErrorMvcAutoConfiguration.class
-        }
+        value = ClientController.class,
+        useDefaultFilters = false,
+        includeFilters = @ComponentScan.Filter(classes = ClientController.class)
 )
 @AutoConfigureMockMvc(addFilters = false)
 @TestPropertySource(properties = {
@@ -82,7 +77,8 @@ class ClientControllerTest {
                 .build();
     }
 
-    // ==================== PING ====================
+    // ==================== PING ENDPOINT TESTS ====================
+
     @Test
     void testPing_ShouldReturnPong() throws Exception {
         mockMvc.perform(get("/clients/ping"))
@@ -90,7 +86,8 @@ class ClientControllerTest {
                 .andExpect(content().string("pong"));
     }
 
-    // ==================== CREATE CLIENT ====================
+    // ==================== CREATE CLIENT - HAPPY PATH TESTS ====================
+
     @Test
     void testCreateClient_ValidData_ShouldReturnCreated() throws Exception {
         when(clientService.createClient(any(ClientRequestDTO.class))).thenReturn(clientResponse);
@@ -102,10 +99,14 @@ class ClientControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.name").value("John Doe"))
-                .andExpect(jsonPath("$.email").value("john.doe@example.com"));
+                .andExpect(jsonPath("$.email").value("john.doe@example.com"))
+                .andExpect(jsonPath("$.phone").value("+1234567890"))
+                .andExpect(jsonPath("$.status").value("ACTIVE"));
 
-        verify(clientService, times(1)).createClient(any());
+        verify(clientService, times(1)).createClient(any(ClientRequestDTO.class));
     }
+
+    // ==================== CREATE CLIENT - VALIDATION TESTS ====================
 
     @Test
     void testCreateClient_DuplicateEmail_ShouldReturnConflict() throws Exception {
@@ -117,10 +118,25 @@ class ClientControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validClientRequest)))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.errorCode").value("EMAIL_ALREADY_EXISTS"));
+                .andExpect(jsonPath("$.errorCode").value("EMAIL_ALREADY_EXISTS"))
+                .andExpect(jsonPath("$.message").value("Email already registered"));
+    }
+
+    @Test
+    void testCreateClient_DuplicatePhone_ShouldReturnConflict() throws Exception {
+        when(clientService.createClient(any(ClientRequestDTO.class)))
+                .thenThrow(new BusinessException("Phone already registered", "PHONE_ALREADY_EXISTS", 409));
+
+        mockMvc.perform(post("/clients")
+                        .header("Authorization", "ApiKey test-api-key-12345")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validClientRequest)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("PHONE_ALREADY_EXISTS"));
     }
 
     // ==================== GET CLIENT BY ID ====================
+
     @Test
     void testGetClientById_ExistingClient_ShouldReturnClient() throws Exception {
         when(clientService.getClientById(1L)).thenReturn(clientResponse);
@@ -130,6 +146,8 @@ class ClientControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.name").value("John Doe"));
+
+        verify(clientService, times(1)).getClientById(1L);
     }
 
     @Test
@@ -144,22 +162,51 @@ class ClientControllerTest {
     }
 
     // ==================== DELETE CLIENT ====================
+
     @Test
-    void testDeleteClient_ShouldReturnNoContent() throws Exception {
+    void testDeleteClient_ExistingClient_ShouldReturnNoContent() throws Exception {
         doNothing().when(clientService).deleteClient(1L);
 
         mockMvc.perform(delete("/clients/1")
                         .header("Authorization", "ApiKey test-api-key-12345"))
                 .andExpect(status().isNoContent());
+
+        verify(clientService, times(1)).deleteClient(1L);
     }
 
-    // ==================== AUTH ====================
     @Test
-    void testUnauthorizedAccess_ShouldReturn401() throws Exception {
+    void testDeleteClient_NonExistingClient_ShouldReturnNotFound() throws Exception {
+        doThrow(new BusinessException("Client not found", "CLIENT_NOT_FOUND", 404))
+                .when(clientService).deleteClient(999L);
+
+        mockMvc.perform(delete("/clients/999")
+                        .header("Authorization", "ApiKey test-api-key-12345"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("CLIENT_NOT_FOUND"));
+    }
+
+    // ==================== API KEY AUTH ====================
+
+    @Test
+    void testCreateClient_MissingApiKey_ShouldReturnUnauthorized() throws Exception {
         mockMvc.perform(post("/clients")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validClientRequest)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+
+        verify(clientService, never()).createClient(any());
+    }
+
+    @Test
+    void testCreateClient_InvalidApiKey_ShouldReturnUnauthorized() throws Exception {
+        mockMvc.perform(post("/clients")
+                        .header("Authorization", "ApiKey wrong-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validClientRequest)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+
+        verify(clientService, never()).createClient(any());
     }
 }
