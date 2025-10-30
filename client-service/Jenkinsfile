@@ -118,4 +118,19 @@ pipeline {
 
   post {
     success {
-      e
+      echo "✅ Build, análisis y pruebas locales completadas con éxito para ${SERVICE}!"
+    }
+    failure {
+      echo "❌ Falló el pipeline de ${SERVICE}!"
+    }
+    always {
+      echo "=========================================="
+      echo "Service: ${SERVICE}"
+      echo "Status: ${currentBuild.result ?: 'SUCCESS'}"
+      echo "Duration: ${currentBuild.durationString}"
+      echo "=========================================="
+      archiveArtifacts artifacts: "${SERVICE}/target/*.jar", allowEmptyArchive: true, fingerprint: true
+      archiveArtifacts artifacts: "**/trivy-*.txt", allowEmptyArchive: true
+    }
+  }
+}
