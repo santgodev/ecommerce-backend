@@ -59,7 +59,8 @@ pipeline {
                   -Dsonar.sources=. \
                   -Dsonar.host.url=http://sonarqube-dind:9000 \
                   -Dsonar.java.binaries=target/classes \
-                  -Dsonar.token=$SONAR_TOKEN
+                  -Dsonar.token=$SONAR_TOKEN \
+                  --no-progress
               """
             }
           }
@@ -73,10 +74,11 @@ pipeline {
         echo "🧩 Escaneando dependencias con Trivy..."
         dir(env.SERVICE) {
           sh """
-            trivy fs . \
+            trivy fs --no-progress \
               --format table \
               --severity HIGH,CRITICAL \
-              -o trivy-fs-report.txt || true
+              -o trivy-fs-report.txt \
+              . || true
           """
         }
       }
@@ -98,16 +100,19 @@ pipeline {
       }
     }
 
-    // 5️⃣ Escaneo de imagen con Trivy
+    // 5️⃣ Escaneo de imagen con Trivy (CORREGIDO)
     stage('Trivy Image Scan') {
       steps {
         echo "🔎 Escaneando vulnerabilidades en la imagen Docker..."
-        sh """
-          trivy image ${IMAGE} \
-            --format table \
-            --severity HIGH,CRITICAL \
-            -o trivy-image-report.txt || true
-        """
+        dir(env.SERVICE) {
+          sh """
+            trivy image --no-progress \
+              --format table \
+              --severity HIGH,CRITICAL \
+              -o trivy-image-report.txt \
+              ${IMAGE} || true
+          """
+        }
       }
     }
   }
