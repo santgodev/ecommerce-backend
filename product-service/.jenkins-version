@@ -1,0 +1,3 @@
+build-version: 1.0.1
+# Force Jenkins workspace refresh
+# All tests fixed - commit 3de082a
