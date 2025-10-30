@@ -1,3 +1,6 @@
-build-version: 1.0.1
+build-version: 1.0.2
 # Force Jenkins workspace refresh
-# All tests fixed - commit 3de082a
+# Fixed remaining 2 test failures:
+# - Added GlobalExceptionHandler to ProductControllerTest imports
+# - Override spring.config.import in ProductServiceApplicationTests
+# All 34 tests now passing locally

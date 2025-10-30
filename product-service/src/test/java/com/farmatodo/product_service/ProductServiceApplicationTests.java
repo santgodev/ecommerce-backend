@@ -11,6 +11,7 @@ import org.springframework.test.context.TestPropertySource;
 @SpringBootTest
 @TestPropertySource(properties = {
 		"spring.cloud.config.enabled=false",
+		"spring.config.import=",
 		"api.key=test-api-key-12345"
 })
 class ProductServiceApplicationTests {
