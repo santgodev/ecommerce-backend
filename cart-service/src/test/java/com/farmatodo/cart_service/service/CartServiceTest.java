@@ -149,23 +149,23 @@ class CartServiceTest {
                 .build();
 
         activeCart.getItems().add(existingItem);
+        activeCart.setId(1L); // Ensure cart has ID for cartItemRepository query
 
         when(cartRepository.findByUserIdAndStatusWithItems(1L, "ACTIVE"))
                 .thenReturn(Optional.of(activeCart));
         when(productServiceClient.getProductById(101L)).thenReturn(validProduct);
+        when(cartItemRepository.findByCartIdAndProductId(1L, 101L))
+                .thenReturn(Optional.of(existingItem));
+        when(cartItemRepository.save(any(CartItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(cartRepository.save(any(Cart.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        ArgumentCaptor<Cart> cartCaptor = ArgumentCaptor.forClass(Cart.class);
 
         // Act
         cartService.addItemToCart(1L, addItemRequest);
 
         // Assert
-        verify(cartRepository).save(cartCaptor.capture());
-
-        Cart savedCart = cartCaptor.getValue();
-        assertThat(savedCart.getItems()).hasSize(1); // Still only one item
-        assertThat(savedCart.getItems().get(0).getQuantity()).isEqualTo(4); // 2 + 2
+        verify(cartItemRepository).save(existingItem);
+        assertThat(existingItem.getQuantity()).isEqualTo(4); // 2 + 2
+        verify(cartRepository).save(activeCart);
     }
 
     @Test
@@ -174,7 +174,14 @@ class CartServiceTest {
         when(cartRepository.findByUserIdAndStatusWithItems(1L, "ACTIVE"))
                 .thenReturn(Optional.empty());
         when(productServiceClient.getProductById(101L)).thenReturn(validProduct);
-        when(cartRepository.save(any(Cart.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(cartRepository.save(any(Cart.class))).thenAnswer(invocation -> {
+            Cart cart = invocation.getArgument(0);
+            if (cart.getId() == null) {
+                cart.setId(1L); // Simulate ID assignment on first save
+            }
+            return cart;
+        });
+        when(cartItemRepository.save(any(CartItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ArgumentCaptor<Cart> cartCaptor = ArgumentCaptor.forClass(Cart.class);
 
@@ -182,7 +189,8 @@ class CartServiceTest {
         CartResponseDTO response = cartService.addItemToCart(1L, addItemRequest);
 
         // Assert
-        verify(cartRepository).save(cartCaptor.capture());
+        // Cart is saved twice: once in createNewCart(), once at the end of addItemToCart()
+        verify(cartRepository, times(2)).save(cartCaptor.capture());
 
         Cart savedCart = cartCaptor.getValue();
         assertThat(savedCart.getUserId()).isEqualTo(1L);
@@ -195,8 +203,6 @@ class CartServiceTest {
     @Test
     void testAddItemToCart_ProductNotFound_ShouldThrowBusinessException() {
         // Arrange
-        when(cartRepository.findByUserIdAndStatusWithItems(1L, "ACTIVE"))
-                .thenReturn(Optional.of(activeCart));
         when(productServiceClient.getProductById(999L))
                 .thenThrow(new BusinessException("Product not found", "PRODUCT_NOT_FOUND", 404));
 
@@ -213,14 +219,13 @@ class CartServiceTest {
                 .matches(e -> ((BusinessException) e).getHttpStatus() == 404);
 
         verify(productServiceClient).getProductById(999L);
+        verify(productServiceClient, never()).getProductsByIds(anyList());
         verify(cartRepository, never()).save(any());
     }
 
     @Test
     void testAddItemToCart_ProductServiceFailure_ShouldPropagateException() {
         // Arrange
-        when(cartRepository.findByUserIdAndStatusWithItems(1L, "ACTIVE"))
-                .thenReturn(Optional.of(activeCart));
         when(productServiceClient.getProductById(101L))
                 .thenThrow(new RuntimeException("Product service unavailable"));
 
@@ -229,6 +234,7 @@ class CartServiceTest {
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Product service unavailable");
 
+        verify(productServiceClient).getProductById(101L);
         verify(cartRepository, never()).save(any());
     }
 
@@ -298,6 +304,7 @@ class CartServiceTest {
         when(cartRepository.findByUserIdAndStatusWithItems(1L, "ACTIVE"))
                 .thenReturn(Optional.of(activeCart));
         when(productServiceClient.getProductById(101L)).thenReturn(validProduct);
+        when(productServiceClient.getProductsByIds(anyList())).thenReturn(Map.of(101L, validProduct));
         when(cartRepository.save(any(Cart.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         // Act
@@ -326,7 +333,6 @@ class CartServiceTest {
         when(cartRepository.findByUserIdAndStatusWithItems(1L, "ACTIVE"))
                 .thenReturn(Optional.of(activeCart));
         when(productServiceClient.getProductById(eq(101L))).thenReturn(validProduct);
-        when(productServiceClient.getProductById(eq(102L))).thenReturn(productWithLowStock);
 
         Map<Long, ProductDTO> productMap = new HashMap<>();
         productMap.put(101L, validProduct);
@@ -354,15 +360,13 @@ class CartServiceTest {
                 .quantity(0)
                 .build();
 
-        when(cartRepository.findByUserIdAndStatusWithItems(1L, "ACTIVE"))
-                .thenReturn(Optional.of(activeCart));
-
         // Act & Assert
         assertThatThrownBy(() -> cartService.addItemToCart(1L, zeroQuantityRequest))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("Quantity must be greater than zero");
 
         verify(productServiceClient, never()).getProductById(anyLong());
+        verify(productServiceClient, never()).getProductsByIds(anyList());
         verify(cartRepository, never()).save(any());
     }
 
@@ -374,15 +378,13 @@ class CartServiceTest {
                 .quantity(-5)
                 .build();
 
-        when(cartRepository.findByUserIdAndStatusWithItems(1L, "ACTIVE"))
-                .thenReturn(Optional.of(activeCart));
-
         // Act & Assert
         assertThatThrownBy(() -> cartService.addItemToCart(1L, negativeQuantityRequest))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("Quantity must be greater than zero");
 
         verify(productServiceClient, never()).getProductById(anyLong());
+        verify(productServiceClient, never()).getProductsByIds(anyList());
         verify(cartRepository, never()).save(any());
     }
 
@@ -406,7 +408,6 @@ class CartServiceTest {
                 .thenReturn(Optional.of(activeCart));
         when(cartItemRepository.findByCartIdAndProductId(1L, 101L))
                 .thenReturn(Optional.of(existingItem));
-        when(productServiceClient.getProductById(101L)).thenReturn(validProduct);
         when(productServiceClient.getProductsByIds(anyList())).thenReturn(Map.of(101L, validProduct));
         when(cartRepository.save(any(Cart.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
