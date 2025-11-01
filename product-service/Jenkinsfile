@@ -8,17 +8,17 @@ pipeline {
 
   environment {
     SERVICE      = 'product-service'
-    IMAGE_BASE   = "farmatodo/${SERVICE}"
+    IMAGE_BASE   = "ecommerce/${SERVICE}"
     IMAGE_TAG    = "${BUILD_NUMBER}"
     IMAGE        = "${IMAGE_BASE}:${IMAGE_TAG}"
 
     PORT         = '8083'
     HOST         = '8083'
-    NET          = 'farmatodo-network'
+    NET          = 'ecommerce-network'
 
     SONAR_SCANNER_HOME = tool 'sonar7'
 
-    // 📦 Caché persistente para Trivy (evita descargar DB en cada build)
+    // 📦 Caché persistente para Trivy
     TRIVY_CACHE_DIR = '/var/jenkins_home/.trivycache'
   }
 
@@ -33,14 +33,7 @@ pipeline {
     stage('Checkout & Unit Tests') {
       steps {
         echo "📦 Clonando repositorio desde GitHub..."
-        checkout scmGit(
-          branches: [[name: '*/main']],
-          extensions: [],
-          userRemoteConfigs: [[
-            credentialsId: 'jenkins-gcp',
-            url: 'https://github.com/santgodev/farmatodo-backend.git'
-          ]]
-        )
+        checkout scm
 
         dir(env.SERVICE) {
           echo "🧪 Ejecutando pruebas unitarias..."
@@ -49,7 +42,7 @@ pipeline {
       }
     }
 
-    // 2️⃣ Análisis con SonarQube
+    // 2️⃣ Análisis estático con SonarQube
     stage('SonarQube Analysis') {
       steps {
         echo "🔍 Ejecutando análisis estático con SonarQube..."
@@ -107,7 +100,7 @@ pipeline {
       }
     }
 
-    // 5️⃣ Escaneo de imagen con Trivy (optimizado)
+    // 5️⃣ Escaneo de imagen Docker con Trivy
     stage('Trivy Image Scan') {
       steps {
         echo "🔎 Escaneando vulnerabilidades en la imagen Docker..."
@@ -144,6 +137,8 @@ pipeline {
       echo "Status: ${currentBuild.result ?: 'SUCCESS'}"
       echo "Duration: ${currentBuild.durationString}"
       echo "=========================================="
+
+      // Archivos útiles del build
       archiveArtifacts artifacts: "${SERVICE}/target/*.jar", allowEmptyArchive: true, fingerprint: true
       archiveArtifacts artifacts: "**/trivy-*.txt", allowEmptyArchive: true
     }
