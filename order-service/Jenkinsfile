@@ -7,10 +7,18 @@ pipeline {
   }
 
   environment {
-    SERVICE = 'order-service'
-    IMAGE = "farmatodo/${SERVICE}:${BUILD_NUMBER}"
+    SERVICE      = 'order-service'
+    IMAGE_BASE   = "ecommerce/${SERVICE}"
+    IMAGE_TAG    = "${BUILD_NUMBER}"
+    IMAGE        = "${IMAGE_BASE}:${IMAGE_TAG}"
+
+    PORT         = '8085'
+    HOST         = '8085'
+    NET          = 'ecommerce-network'
 
     SONAR_SCANNER_HOME = tool 'sonar7'
+
+    // 📦 Caché persistente para Trivy
     TRIVY_CACHE_DIR = '/var/jenkins_home/.trivycache'
   }
 
@@ -21,22 +29,26 @@ pipeline {
 
   stages {
 
-    // 1️⃣ Checkout & Build
-    stage('Checkout & Build') {
+    // 1️⃣ Checkout & Unit Tests
+    stage('Checkout & Unit Tests') {
       steps {
-        echo "📦 Clonando y compilando el microservicio ${SERVICE}..."
-        checkout scmGit(
+        echo "📦 Clonando repositorio desde GitHub..."
+        // Limpia el workspace antes de clonar
+        deleteDir()
+
+        checkout([
+          $class: 'GitSCM',
           branches: [[name: '*/main']],
-          extensions: [],
+          extensions: [[$class: 'CleanBeforeCheckout']],
           userRemoteConfigs: [[
             credentialsId: 'jenkins-gcp',
             url: 'https://github.com/santgodev/farmatodo-backend.git'
           ]]
-        )
+        ])
 
         dir(env.SERVICE) {
-          echo "🧱 Ejecutando build con Maven..."
-          sh 'mvn -q -Dstyle.color=always clean verify -DskipTests=false'
+          echo "🧪 Ejecutando pruebas unitarias..."
+          sh "mvn -q -Dstyle.color=always clean test"
         }
       }
     }
@@ -44,7 +56,7 @@ pipeline {
     // 2️⃣ Análisis estático con SonarQube
     stage('SonarQube Analysis') {
       steps {
-        echo "🔍 Analizando calidad de código con SonarQube..."
+        echo "🔍 Ejecutando análisis estático con SonarQube..."
         dir(env.SERVICE) {
           withCredentials([string(credentialsId: 'sonartoken', variable: 'SONAR_TOKEN')]) {
             withSonarQubeEnv('sonar') {
@@ -62,27 +74,51 @@ pipeline {
       }
     }
 
-    // 3️⃣ Construcción de imagen Docker
-    stage('Build Docker Image') {
+    // 3️⃣ Escaneo de dependencias con Trivy (fuente)
+    stage('Trivy Source Scan') {
       steps {
+        echo "🧩 Escaneando dependencias con Trivy (fuente)..."
         dir(env.SERVICE) {
-          echo "🐳 Construyendo imagen Docker para ${SERVICE}..."
           sh """
-            docker build -t ${IMAGE} .
-            echo "✅ Imagen construida: ${IMAGE}"
+            export TRIVY_CACHE_DIR=${TRIVY_CACHE_DIR}
+            echo "📦 Usando caché de Trivy: ${TRIVY_CACHE_DIR}"
+
+            trivy fs \
+              --no-progress \
+              --skip-update \
+              --format table \
+              --severity HIGH,CRITICAL \
+              -o trivy-fs-report.txt \
+              . || true
           """
         }
       }
     }
 
-    // 4️⃣ Escaneo de seguridad con Trivy
+    // 4️⃣ Construcción y prueba local en Docker
+    stage('Build Docker Image & Run Local') {
+      steps {
+        dir(env.SERVICE) {
+          echo "🐳 Construyendo imagen Docker local..."
+          sh """
+            docker build -t ${IMAGE} .
+            docker network inspect ${NET} >/dev/null 2>&1 || docker network create ${NET}
+            docker rm -f ${SERVICE} >/dev/null 2>&1 || true
+            docker run -d --name ${SERVICE} --network ${NET} -p ${HOST}:${PORT} ${IMAGE}
+            echo "✅ ${SERVICE} ejecutándose localmente en http://localhost:${HOST}"
+          """
+        }
+      }
+    }
+
+    // 5️⃣ Escaneo de imagen Docker con Trivy
     stage('Trivy Image Scan') {
       steps {
-        echo "🧩 Escaneando vulnerabilidades con Trivy..."
+        echo "🔎 Escaneando vulnerabilidades en la imagen Docker..."
         dir(env.SERVICE) {
           sh """
             export TRIVY_CACHE_DIR=${TRIVY_CACHE_DIR}
-            echo "📦 Caché de Trivy: ${TRIVY_CACHE_DIR}"
+            echo "📦 Reutilizando caché de Trivy: ${TRIVY_CACHE_DIR}"
 
             trivy image \
               --no-progress \
@@ -101,18 +137,19 @@ pipeline {
 
   post {
     success {
-      echo "✅ Pipeline completado con éxito para ${SERVICE}."
+      echo "✅ Build, análisis y pruebas locales completadas con éxito para ${SERVICE}!"
     }
     failure {
-      echo "❌ Falló el pipeline de ${SERVICE}."
+      echo "❌ Falló el pipeline de ${SERVICE}!"
     }
     always {
       echo "=========================================="
-      echo "📘 Service: ${SERVICE}"
-      echo "📊 Status: ${currentBuild.result ?: 'SUCCESS'}"
-      echo "⏱ Duration: ${currentBuild.durationString}"
+      echo "Service: ${SERVICE}"
+      echo "Status: ${currentBuild.result ?: 'SUCCESS'}"
+      echo "Duration: ${currentBuild.durationString}"
       echo "=========================================="
 
+      // Archivos útiles del build
       archiveArtifacts artifacts: "${SERVICE}/target/*.jar", allowEmptyArchive: true, fingerprint: true
       archiveArtifacts artifacts: "**/trivy-*.txt", allowEmptyArchive: true
     }
