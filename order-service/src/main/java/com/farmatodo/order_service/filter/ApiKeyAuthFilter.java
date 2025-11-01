@@ -70,7 +70,7 @@ public class ApiKeyAuthFilter implements Filter {
         response.setCharacterEncoding("UTF-8");
 
         String jsonResponse = String.format(
-            "{\"errorCode\":\"UNAUTHORIZED\",\"message\":\"%s\",\"status\":401}",
+            "{\"error\":\"UNAUTHORIZED\",\"message\":\"%s\",\"status\":401}",
             message
         );
 

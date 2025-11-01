@@ -1,6 +1,9 @@
 package com.farmatodo.product_service.controller;
 
+import com.farmatodo.product_service.config.ApiKeyFilter;
+import com.farmatodo.product_service.config.MdcFilter;
 import com.farmatodo.product_service.dto.ProductDTO;
+import com.farmatodo.product_service.exception.GlobalExceptionHandler;
 import com.farmatodo.product_service.dto.ProductRequestDTO;
 import com.farmatodo.product_service.dto.ProductSearchResponseDTO;
 import com.farmatodo.product_service.service.ProductService;
@@ -8,9 +11,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -26,7 +29,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(ProductController.class)
-@AutoConfigureMockMvc(addFilters = false)
+@Import({ApiKeyFilter.class, MdcFilter.class, GlobalExceptionHandler.class})
 @TestPropertySource(properties = {
         "api.key=test-api-key-12345",
         "product.minStock=0"
