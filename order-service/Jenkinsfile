@@ -38,11 +38,11 @@ pipeline {
 
         checkout([
           $class: 'GitSCM',
-          branches: [[name: '*/main']],
+          branches: [[name: '*/devop']],
           extensions: [[$class: 'CleanBeforeCheckout']],
           userRemoteConfigs: [[
             credentialsId: 'jenkins-gcp',
-            url: 'https://github.com/santgodev/farmatodo-backend.git'
+            url: 'https://github.com/santgodev/ecommerce-backend.git'
           ]]
         ])
 
