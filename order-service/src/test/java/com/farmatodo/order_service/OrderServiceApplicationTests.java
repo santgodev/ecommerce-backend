@@ -14,7 +14,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 @TestPropertySource(properties = {
 		"spring.cloud.config.enabled=false",
 		"spring.cloud.config.import-check.enabled=false",
-		"spring.mail.username=test@farmatodo.com"
+		"spring.mail.username=test@farmatodo.com",
+		"spring.datasource.url=jdbc:h2:mem:testdb",
+		"spring.datasource.driver-class-name=org.h2.Driver",
+		"spring.jpa.hibernate.ddl-auto=create-drop",
+		"api.key=test-api-key-12345"
 })
 class OrderServiceApplicationTests {
 

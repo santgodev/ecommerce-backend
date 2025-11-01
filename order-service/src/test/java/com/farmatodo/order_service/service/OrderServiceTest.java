@@ -54,6 +54,9 @@ class OrderServiceTest {
     @Mock
     private LogService logService;
 
+    @Mock
+    private EmailService emailService;
+
     @InjectMocks
     private OrderService orderService;
 
@@ -157,7 +160,7 @@ class OrderServiceTest {
         verify(cartServiceClient).getCartByUserId(1L);
         verify(clientServiceClient).getClientById(1L);
         verify(tokenServiceClient).processPayment(any(PaymentRequestDTO.class));
-        verify(orderRepository, times(3)).save(any(Order.class)); // PENDING -> PROCESSING -> APPROVED
+        verify(orderRepository, times(3)).save(any(Order.class)); // PENDING -> PROCESSING -> final status
     }
 
     @Test
@@ -498,7 +501,7 @@ class OrderServiceTest {
     }
 
     @Test
-    void testCreateOrder_InvalidToken_ShouldThrowBusinessException() {
+    void testCreateOrder_InvalidToken_ShouldReturnRejectedOrder() {
         // Arrange
         CreateOrderRequestDTO invalidRequest = CreateOrderRequestDTO.builder()
                 .clientId(1L)
@@ -515,10 +518,13 @@ class OrderServiceTest {
         when(tokenServiceClient.processPayment(any(PaymentRequestDTO.class)))
                 .thenThrow(new BusinessException("Token is required", "INVALID_TOKEN", 400));
 
-        // Act & Assert
-        assertThatThrownBy(() -> orderService.createOrder(invalidRequest))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("Token is required");
+        // Act
+        OrderResponseDTO response = orderService.createOrder(invalidRequest);
+
+        // Assert
+        assertThat(response).isNotNull();
+        assertThat(response.getStatus()).isEqualTo("REJECTED");
+        assertThat(response.getRejectionReason()).contains("Token is required");
 
         verify(tokenServiceClient).processPayment(any());
     }
@@ -533,8 +539,18 @@ class OrderServiceTest {
         when(tokenServiceClient.processPayment(any(PaymentRequestDTO.class))).thenReturn(approvedPayment);
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
-            order.setId(1L);
-            return order;
+            // Create a new Order object to avoid reference issues when status changes
+            Order savedOrder = Order.builder()
+                    .id(1L)
+                    .clientId(order.getClientId())
+                    .token(order.getToken())
+                    .status(order.getStatus())
+                    .transactionId(order.getTransactionId())
+                    .paymentAttempts(order.getPaymentAttempts())
+                    .rejectionReason(order.getRejectionReason())
+                    .items(order.getItems())
+                    .build();
+            return savedOrder;
         });
 
         ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
@@ -566,8 +582,18 @@ class OrderServiceTest {
         when(tokenServiceClient.processPayment(any(PaymentRequestDTO.class))).thenReturn(rejectedPayment);
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order order = invocation.getArgument(0);
-            order.setId(1L);
-            return order;
+            // Create a new Order object to avoid reference issues when status changes
+            Order savedOrder = Order.builder()
+                    .id(1L)
+                    .clientId(order.getClientId())
+                    .token(order.getToken())
+                    .status(order.getStatus())
+                    .transactionId(order.getTransactionId())
+                    .paymentAttempts(order.getPaymentAttempts())
+                    .rejectionReason(order.getRejectionReason())
+                    .items(order.getItems())
+                    .build();
+            return savedOrder;
         });
 
         ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
