@@ -96,7 +96,7 @@ public class CartService {
                 userId, productId, transactionId);
 
         if (request.getQuantity() == null || request.getQuantity() <= 0) {
-            throw new BusinessException("Quantity must be greater than 0", "INVALID_QUANTITY", 400);
+            throw new BusinessException("Quantity must be greater than zero", "INVALID_QUANTITY", 400);
         }
 
         Cart cart = cartRepository.findByUserIdAndStatusWithItems(userId, ACTIVE_STATUS)
@@ -195,7 +195,7 @@ public class CartService {
             throw new BusinessException("Product ID is required", "MISSING_PRODUCT_ID", 400);
         }
         if (request.getQuantity() == null || request.getQuantity() <= 0) {
-            throw new BusinessException("Quantity must be greater than 0", "INVALID_QUANTITY", 400);
+            throw new BusinessException("Quantity must be greater than zero", "INVALID_QUANTITY", 400);
         }
     }
 
@@ -216,10 +216,6 @@ public class CartService {
         BigDecimal totalAmount = itemDTOs.stream()
                 .map(CartItemDTO::getSubtotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        // Update cart total in database
-        cart.setTotalAmount(totalAmount);
-        cartRepository.save(cart);
 
         return CartResponseDTO.builder()
                 .id(cart.getId())
